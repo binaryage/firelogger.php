@@ -97,7 +97,7 @@
                 if (!is_object($o) || method_exists($o, '__toString')) {
                     return (string)$o;
                 }
-                return "xxxxxx".get_class($o);
+                return get_class($o);
             }
             if (is_object($o)) {
                 $data = array();
