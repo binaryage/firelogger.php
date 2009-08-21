@@ -104,7 +104,10 @@
                 $r = new ReflectionObject($o);
                 $props = $r->getProperties();
                 foreach ($props as $prop) {
-                    $data[$prop->getName()] = $this->pickle($prop->getValue($o), $maxLevel-1);
+                    $name = $prop->getName();
+                    $prop->setAccessible(true); // http://schlitt.info/opensource/blog/0581_reflecting_private_properties.html
+                    $val = $prop->getValue($o);
+                    $data[$name] = $this->pickle($val, $maxLevel-1);
                 }
                 return $data;
             }
@@ -184,25 +187,29 @@
         function fwarn(/*fmt, obj1, obj2, ...*/) {
             global $registeredFireLoggers;
             $args = func_get_args();
-            call_user_func_array("warning", array(&$registeredFireLoggers[0], 'log'), $args);
+            array_unshift($args, "warning");
+            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
         }
 
         function ferror(/*fmt, obj1, obj2, ...*/) {
             global $registeredFireLoggers;
             $args = func_get_args();
-            call_user_func_array("error", array(&$registeredFireLoggers[0], 'log'), $args);
+            array_unshift($args, "error");
+            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
         }
 
         function finfo(/*fmt, obj1, obj2, ...*/) {
             global $registeredFireLoggers;
             $args = func_get_args();
-            call_user_func_array("info", array(&$registeredFireLoggers[0], 'log'), $args);
+            array_unshift($args, "info");
+            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
         }
 
         function fcritical(/*fmt, obj1, obj2, ...*/) {
             global $registeredFireLoggers;
             $args = func_get_args();
-            call_user_func_array("critical", array(&$registeredFireLoggers[0], 'log'), $args);
+            array_unshift($args, "critical");
+            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
         }
     }
 ?>
