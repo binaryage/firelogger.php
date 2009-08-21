@@ -19,7 +19,7 @@
         global $registeredFireLoggers;
 
         // json_encode supports only UTF-8 encoded data
-        function utfConvertor(&$value, &$key, $userdata = '') {
+        function utfConvertor(&$value, &$key, $userdata='') {
             if (gettype($value)==='string') {
                 $value = utf8_encode($value);
             }
@@ -29,7 +29,7 @@
         }
 
         // source: http://cz2.php.net/manual/en/function.array-walk-recursive.php#63285
-        function array_walk_recursive2(&$input, $funcname, $userdata = '') {
+        function array_walk_recursive2(&$input, $funcname, $userdata='') {
             if (!is_callable($funcname)) return false;
             if (!is_array($input)) return false;
             foreach ($input AS $key => $value) {
@@ -61,12 +61,13 @@
             'logs' => $logs
         );
         
-        // final encoding
+        // perform encoding
         $id = dechex(mt_rand(0, 0xFFFF)).dechex(mt_rand(0, 0xFFFF)); // mt_rand is not working with 0xFFFFFFFF
         array_walk_recursive2($output, 'utfConvertor'); // json_encode supports only UTF-8 encoded data!!!
         $json = json_encode($output);
         $res = str_split(base64_encode($json), 76); // RFC 2045
         
+        // output final FireLogger headers
         foreach($res as $k=>$v) {
             header("FireLogger-$id-$k:$v");
         }
