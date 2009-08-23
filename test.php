@@ -35,6 +35,14 @@ $api = new FireLogger("api");
 $api->log("info", "hello from api logger");
 $api->log("have", "fun!");
 
+try {
+    throw new Exception("this is a nasty exception, catch it!");
+} catch (Exception $e) {
+    flog($e);
+}
+
+//throw new Exception("this exception is caught automagically because firelogger installs set_exception_handler");
+
 EOD;
 
     echo "<pre>$code</pre>";

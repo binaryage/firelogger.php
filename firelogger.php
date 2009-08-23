@@ -160,7 +160,7 @@
                 'template' => $fmt,
                 'message' => $fmt
             );
-            if (is_subclass_of($args[0], Exception)) {
+            if (count($args)>0 && is_object($args[0]) && is_a($args[0], 'Exception')) { // is_object check prevents http://pear.php.net/bugs/bug.php?id=2975
                 // exception with backtrace
                 $e = $args[0];
                 $trace = $e->getTrace();
@@ -168,11 +168,12 @@
                 $f = array();
                 foreach ($trace as $frame) {
                     $t[] = array(
-                        $frame['file'],
-                        $frame['line'],
-                        $frame['class'].$frame['type'].$frame['function']
+                        @$frame['file'],
+                        @$frame['line'],
+                        @$frame['class'].@$frame['type'].@$frame['function'],
+                        @$frame['object']
                     );
-                    $f[] = $frame['args'];
+                    $f[] = @$frame['args'];
                 };
                 
                 $item['exc_info'] = array(
