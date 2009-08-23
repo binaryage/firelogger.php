@@ -1,45 +1,58 @@
 <?php
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // FireLogger for PHP (server-side library)
-    //
     // http://firelogger4php.binaryage.com
+    //
+    // see test.php for sample usage
+    //
     // protocol specs: http://wiki.github.com/darwin/firelogger
     //
 
-    // init constants, you may define them before including firelog.php
+    // some directives, you may define them before including firelogger.php
     if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.1');
     if (!defined('FIRELOGGER_API_VERSION')) define('FIRELOGGER_API_VERSION', 1);
     if (!defined('FIRELOGGER_MAX_PICKLE_DEPTH')) define('FIRELOGGER_MAX_PICKLE_DEPTH', 10);
-
-    $registeredFireLoggers = array(); // the array of all instantiated fire-loggers during request
-    $fireLoggerGlobalCounter = 0; // aid for ordering log records on client
-    $fireLoggerEnabled = true; // enabled by default
+    // ... there is more scattered throught this source, hint: search for constants beginning with "FIRELOGGER_"
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    class FireLoggerFileLine {
-        public $file;
-        public $line;
-
-        function __construct($file, $line) {
-            $this->file = $file;
-            $this->line = $line;
-        }
-    }
-    
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // this class represents logger object
+    // logger has name and you can ask him to perform logging for you like this:
+    //
+    //   $ajax = new FireLogger("ajax");
+    //   $ajax->log("info", "hello from ajax logger");
+    //   $ajax->log("have", "fun!");
+    //
+    //  you may also use shortcut helper functions to log into default logger
+    //
+    //    flog("Hello from PHP!");
+    //    fwarn("Warning, %s alert!", "gertruda");
+    //    ...
+    //
     class FireLogger {
+        // global state kept under FireLogger "namespace"
+        public static $enabled = true; // enabled by default, but see the code executed after class
+        public static $counter = 0; // an aid for ordering log records on client
+        public static $loggers = array(); // the array of all instantiated fire-loggers during request
+        public static $default; // points to default logger
+        public static $error; // points to error logger (for errors trigerred by PHP)
+        public static $oldErrorHandler;
+        public static $oldExceptionHandler;
+        public static $clientVersion = '?';
+        public static $recommendedClientVersion = '0.7';
+        
+        // logger instance data
         public $name;  // [optional] logger name
         public $style; // [optional] CSS snippet for logger icon in FireLogger console
-        public $logs = array();
-        var $levels = array('debug', 'warning', 'info', 'error', 'critical');
-        
-        function __construct($name, $style=null) {
-            global $registeredFireLoggers;
+        public $logs = array(); // array of captured log records, this will be encoded into headers during 
+        public $levels = array('debug', 'warning', 'info', 'error', 'critical'); // well-known log levels (originated in Python)
+
+        //------------------------------------------------------------------------------------------------------
+        function __construct($name='logger', $style=null) {
             $this->name = $name;
             $this->style = $style;
-            $registeredFireLoggers[] = $this;
+            FireLogger::$loggers[] = $this;
         }
-        
+        //------------------------------------------------------------------------------------------------------
         private function pickle($o, $maxLevel=FIRELOGGER_MAX_PICKLE_DEPTH) {
             if ($maxLevel==0) {
                 // see http://us3.php.net/manual/en/language.types.string.php#73524
@@ -70,7 +83,7 @@
             // TODO: investigate other complex cases
             return $o;
         }
-
+        //------------------------------------------------------------------------------------------------------
         private function fix_eval_in_file_line($file, $line) {
             // special hack for eval'd code:
             // "/Users/darwin/code/firelogger4php/test.php(41) : eval()'d code 21"
@@ -80,7 +93,7 @@
             }
             return array($file, $line);
         }
-        
+        //------------------------------------------------------------------------------------------------------
         private function extract_file_line($trace) {
             while (count($trace)>0 && !array_key_exists('file', $trace[0])) array_shift($trace);
             $thisFile = $trace[0]['file'];
@@ -91,10 +104,9 @@
             
             return $this->fix_eval_in_file_line($file, $line);
         }
-        
+        //------------------------------------------------------------------------------------------------------
         function log(/*level, fmt, obj1, obj2, ...*/) {
-            global $fireLoggerGlobalCounter, $fireLoggerEnabled;
-            if (!$fireLoggerEnabled) return; // no-op
+            if (!FireLogger::$enabled) return; // no-op
             
             $args = func_get_args();
             $fmt = '';
@@ -112,7 +124,7 @@
                 'args' => array(),
                 'level' => $level,
                 'timestamp' => $time,
-                'order' => $fireLoggerGlobalCounter++, // PHP is really fast, timestamp has insufficient resolution for log records ordering
+                'order' => FireLogger::$counter++, // PHP is really fast, timestamp has insufficient resolution for log records ordering
                 'time' => gmdate('H:i:s', (int)$time).'.'.substr(fmod($time, 1.0), 2, 3), // '23:53:13.396'
                 'template' => $fmt,
                 'message' => $fmt // TODO: render reasonable plain text message
@@ -176,41 +188,37 @@
             
             $this->logs[] = $item;
         }
-    }
-    
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // decide if firelogger should be enabled
-    if (!defined('FIRELOGGER_NO_VERSION_CHECK')) {
-        if (!isset($_SERVER['HTTP_X_FIRELOGGER'])) {
-            $fireLoggerEnabled = false;
-        } else {
-            $version = $_SERVER['HTTP_X_FIRELOGGER'];
-            $bestExtensionVersion = '0.7';
-            if ($version!=$bestExtensionVersion) {
-                trigger_error("FireLogger for PHP works best with FireLogger extension of version $bestExtensionVersion. Please upgrade your Firefox extension: http://firelogger4php.binaryage.com.");
-            }
+        //------------------------------------------------------------------------------------------------------
+        static function firelogger_error_handler($errno, $errstr, $errfile, $errline) {
+            // any ideas how to get string rep of $errno from PHP?
+            $errors = array(
+                1 => 'ERROR',
+                2 => 'WARNING',
+                4 => 'PARSE',
+                8 => 'NOTICE',
+                16 => 'CORE_ERROR',
+                32 => 'CORE_WARNING',
+                64 => 'COMPILE_ERROR',
+                128 => 'COMPILE_WARNING',
+                256 => 'USER_ERROR',
+                512 => 'USER_WARNING',
+                1024 => 'USER_NOTICE',
+                2048 => 'STRICT',
+                4096 => 'RECOVERABLE_ERROR',
+                8192 => 'DEPRECATED',
+                16384 => 'USER_DEPRECATED',
+                30719 => 'ALL'
+            );
+            $level = 'critical';
+            $no = isset($errors[$errno])?$errors[$errno]:'ERROR';
+            call_user_func_array(array(&FireLogger::$error, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline)));
         }
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // test if firelogger password matches
-    if (!defined('FIRELOGGER_NO_PASSWORD_CHECK') && defined('FIRELOGGER_PASSWORD') && $fireLoggerEnabled) {
-        if (isset($_SERVER['HTTP_X_FIRELOGGERAUTH'])) {
-            $clientHash = $_SERVER['HTTP_X_FIRELOGGERAUTH'];
-            $serverHash = md5("#FireLoggerPassword#".FIRELOGGER_PASSWORD."#");
-            if ($clientHash!==$serverHash) { // passwords do not match
-                $fireLoggerEnabled = false;
-                trigger_error("FireLogger password do not match. Have you specified correct password FireLogger extension?");
-            }
-        } else {
-            $fireLoggerEnabled = false; // silently disable firelogger in case client didn't provide requested password
-        }   
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // register default logger for convenience
-    if (!defined('FIRELOGGER_NO_OUTPUT_HANDLER')) {
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //------------------------------------------------------------------------------------------------------
+        static function firelogger_exception_handler($exception) {
+            $args = func_get_args();
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
+        }
+        //------------------------------------------------------------------------------------------------------
         //
         // Encoding handler
         //   * collects all log messages from all FireLogger instances
@@ -218,9 +226,7 @@
         //
         // see protocol specs at http://wiki.github.com/darwin/firelogger
         //
-        function FireLoggerHandler($buffer) {
-            global $registeredFireLoggers;
-
+        static function handler($buffer) {
             // json_encode supports only UTF-8 encoded data
             function utfConvertor(&$value, &$key, $userdata = '') {
                 if (gettype($value)==='string') {
@@ -256,7 +262,7 @@
             }
 
             $logs = array();
-            foreach ($registeredFireLoggers as $logger) {
+            foreach (FireLogger::$loggers as $logger) {
                 $logs = array_merge($logs, $logger->logs);
             }
 
@@ -276,97 +282,100 @@
         
             return $buffer; // made no changes to the incomming buffer
         }
-        
-        if ($fireLoggerEnabled) ob_start('FireLoggerHandler'); // start output buffering (in case firelogger should be enabled)
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // helper class for passing file/line override into log methods
+    class FireLoggerFileLine {
+        public $file;
+        public $line;
+        function __construct($file, $line) {
+            $this->file = $file;
+            $this->line = $line;
+        }
+    }
+    
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // decide if firelogger should be enabled
+    if (!defined('FIRELOGGER_NO_VERSION_CHECK')) {
+        if (!isset($_SERVER['HTTP_X_FIRELOGGER'])) {
+            FireLogger::$enabled = false;
+        } else {
+            FireLogger::$clientVersion = $_SERVER['HTTP_X_FIRELOGGER'];
+            FireLogger::$recommendedClientVersion = '0.7';
+            if (FireLogger::$clientVersion!=FireLogger::$recommendedClientVersion) {
+                trigger_error("FireLogger for PHP (v".FIRELOGGER_VERSION.") works best with FireLogger extension of version ".FireLogger::$recommendedClientVersion.". You are currently using extension v".FireLogger::$clientVersion.". Please upgrade your Firefox extension: http://firelogger4php.binaryage.com.");
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // test if firelogger password matches
+    if (!defined('FIRELOGGER_NO_PASSWORD_CHECK') && defined('FIRELOGGER_PASSWORD') && FireLogger::$enabled) {
+        if (isset($_SERVER['HTTP_X_FIRELOGGERAUTH'])) {
+            $clientHash = $_SERVER['HTTP_X_FIRELOGGERAUTH'];
+            $serverHash = md5("#FireLoggerPassword#".FIRELOGGER_PASSWORD."#");
+            if ($clientHash!==$serverHash) { // passwords do not match
+                FireLogger::$enabled = false;
+                trigger_error("FireLogger password do not match. Have you specified correct password FireLogger extension?");
+            }
+        } else {
+            FireLogger::$enabled = false; // silently disable firelogger in case client didn't provide requested password
+        }   
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // register default logger for convenience
+    if (!defined('FIRELOGGER_NO_OUTPUT_HANDLER')) {
+        if (FireLogger::$enabled) ob_start('FireLogger::handler'); // start output buffering (in case firelogger should be enabled)
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register default logger for convenience
     if (!defined('FIRELOGGER_NO_DEFAULT_LOGGER')) {
-        new FireLogger('php', 'background-color: #767ab6'); // register default firelogger with official PHP logo color :-)
+        FireLogger::$default = new FireLogger('php', 'background-color: #767ab6'); // register default firelogger with official PHP logo color :-)
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // shortcut functions for convenience
     if (!defined('FIRELOGGER_NO_CONFLICT')) {
-        
         function flog(/*fmt, obj1, obj2, ...*/) {
-            global $registeredFireLoggers;
             $args = func_get_args();
-            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
-
         function fwarn(/*fmt, obj1, obj2, ...*/) {
-            global $registeredFireLoggers;
             $args = func_get_args();
             array_unshift($args, 'warning');
-            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
-
         function ferror(/*fmt, obj1, obj2, ...*/) {
-            global $registeredFireLoggers;
             $args = func_get_args();
             array_unshift($args, 'error');
-            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
-
         function finfo(/*fmt, obj1, obj2, ...*/) {
-            global $registeredFireLoggers;
             $args = func_get_args();
             array_unshift($args, 'info');
-            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
-
         function fcritical(/*fmt, obj1, obj2, ...*/) {
-            global $registeredFireLoggers;
             $args = func_get_args();
             array_unshift($args, 'critical');
-            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register global handler for uncaught exceptions
     if (!defined('FIRELOGGER_NO_EXCEPTION_HANDLER')) {
-        function firelogger_exception_handler($exception) {
-            global $registeredFireLoggers;
-            $args = func_get_args();
-            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
-        }
-        $fireLoggerOldExceptionHandler = set_exception_handler('firelogger_exception_handler');
+        FireLogger::$oldExceptionHandler = set_exception_handler('FireLogger::firelogger_exception_handler');
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register global handler for errors
     if (!defined('FIRELOGGER_NO_ERROR_HANDLER')) {
-        $errorFireLogger = new FireLogger('error', 'background-color: #f00');
-        
-        function firelogger_error_handler($errno, $errstr, $errfile, $errline) {
-            global $errorFireLogger;
-            // any ideas how to get string rep of $errno from PHP?
-            $errors = array(
-                1 => 'ERROR',
-                2 => 'WARNING',
-                4 => 'PARSE',
-                8 => 'NOTICE',
-                16 => 'CORE_ERROR',
-                32 => 'CORE_WARNING',
-                64 => 'COMPILE_ERROR',
-                128 => 'COMPILE_WARNING',
-                256 => 'USER_ERROR',
-                512 => 'USER_WARNING',
-                1024 => 'USER_NOTICE',
-                2048 => 'STRICT',
-                4096 => 'RECOVERABLE_ERROR',
-                8192 => 'DEPRECATED',
-                16384 => 'USER_DEPRECATED',
-                30719 => 'ALL'
-            );
-            $level = 'critical';
-            $no = isset($errors[$errno])?$errors[$errno]:'ERROR';
-            call_user_func_array(array(&$errorFireLogger, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline)));
-        }
-        $fireLoggerOldExceptionHandler = set_error_handler('firelogger_error_handler');
+        FireLogger::$error = new FireLogger('error', 'background-color: #f00');
+        FireLogger::$oldErrorHandler = set_error_handler('FireLogger::firelogger_error_handler');
     }
 
 ?>
