@@ -19,7 +19,7 @@
         global $registeredFireLoggers;
 
         // json_encode supports only UTF-8 encoded data
-        function utfConvertor(&$value, &$key, $userdata='') {
+        function utfConvertor(&$value, &$key, $userdata = '') {
             if (gettype($value)==='string') {
                 $value = utf8_encode($value);
             }
@@ -29,7 +29,7 @@
         }
 
         // source: http://cz2.php.net/manual/en/function.array-walk-recursive.php#63285
-        function array_walk_recursive2(&$input, $funcname, $userdata='') {
+        function array_walk_recursive2(&$input, $funcname, $userdata = '') {
             if (!is_callable($funcname)) return false;
             if (!is_array($input)) return false;
             foreach ($input AS $key => $value) {
@@ -61,13 +61,12 @@
             'logs' => $logs
         );
         
-        // perform encoding
+        // final encoding
         $id = dechex(mt_rand(0, 0xFFFF)).dechex(mt_rand(0, 0xFFFF)); // mt_rand is not working with 0xFFFFFFFF
         array_walk_recursive2($output, 'utfConvertor'); // json_encode supports only UTF-8 encoded data!!!
         $json = json_encode($output);
         $res = str_split(base64_encode($json), 76); // RFC 2045
         
-        // output final FireLogger headers
         foreach($res as $k=>$v) {
             header("FireLogger-$id-$k:$v");
         }
@@ -150,25 +149,55 @@
             if (gettype($args[0])==='string') {
                 $fmt = array_shift($args);
             }
-            $data = array();
-            foreach ($args as $arg) {
-                $data[] = $this->pickle($arg);
-            }
-            
-            $trace = debug_backtrace();
-            list($file, $line) = $this->extract_file_line($trace);
+
             list($usec, $sec) = explode(' ', microtime());
             $item = array(
                 'name' => $this->name,
-                'args' => $data,
+                'args' => array(),
                 'level' => $level,
                 'timestamp' => $sec,
                 'time' => gmdate('H:i:s', $sec).'.'.substr($usec, 2, 3), // '23:53:13.396'
                 'template' => $fmt,
-                'message' => $fmt,
-                'pathname' => $file,
-                'lineno' => $line
+                'message' => $fmt
             );
+            if (is_subclass_of($args[0], Exception)) {
+                // exception with backtrace
+                $e = $args[0];
+                $trace = $e->getTrace();
+                $t = array();
+                $f = array();
+                foreach ($trace as $frame) {
+                    $t[] = array(
+                        $frame['file'],
+                        $frame['line'],
+                        $frame['class'].$frame['type'].$frame['function']
+                    );
+                    $f[] = $frame['args'];
+                };
+                
+                $item['exc_info'] = array(
+                    $e->getMessage(),
+                    $e->getFile(),
+                    $t
+                );
+                $item['exc_frames'] = $f;
+                $item['exc_text'] = 'exception';
+                $item['template'] = $e->getMessage();
+                $item['code'] = $e->getCode();
+                $item['pathname'] = $e->getFile();
+                $item['lineno'] = $e->getLine();
+            } else {
+                // rich log record
+                $trace = debug_backtrace();
+                list($file, $line) = $this->extract_file_line($trace);
+                $data = array();
+                foreach ($args as $arg) {
+                    $data[] = $this->pickle($arg);
+                }
+                $item['args'] = $data;
+                $item['pathname'] = $file;
+                $item['lineno'] = $line;
+            }
             
             $this->logs[] = $item;
         }
