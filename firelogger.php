@@ -11,72 +11,76 @@
     $fireLoggerGlobalCounter = 0; // aid for ordering log records on client
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
-    // Encoding handler
-    //   * collects all log messages from all FireLogger instances
-    //   * encodes them into HTTP headers
-    //
-    // see protocol specs at http://wiki.github.com/darwin/firelogger
-    //
-    function FireLoggerHandler($buffer) {
-        global $registeredFireLoggers;
+    // register default logger for convenience
+    if (!defined('FIRELOGGER_NO_OUTPUT_HANDLER')) {
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //
+        // Encoding handler
+        //   * collects all log messages from all FireLogger instances
+        //   * encodes them into HTTP headers
+        //
+        // see protocol specs at http://wiki.github.com/darwin/firelogger
+        //
+        function FireLoggerHandler($buffer) {
+            global $registeredFireLoggers;
 
-        // json_encode supports only UTF-8 encoded data
-        function utfConvertor(&$value, &$key, $userdata = '') {
-            if (gettype($value)==='string') {
-                $value = utf8_encode($value);
-            }
-            if (gettype($key)==='string') {
-                $key = utf8_encode($key);
-            }
-        }
-
-        // source: http://cz2.php.net/manual/en/function.array-walk-recursive.php#63285
-        function array_walk_recursive2(&$input, $funcname, $userdata = '') {
-            if (!is_callable($funcname)) return false;
-            if (!is_array($input)) return false;
-            foreach ($input AS $key => $value) {
-                if (is_array($input[$key])) {
-                    array_walk_recursive2($input[$key], $funcname, $userdata);
-                } else {
-                    $saved_value = $value;
-                    $saved_key = $key;
-                    if (!empty($userdata)) {
-                        $funcname($value, $key, $userdata);
-                    } else {
-                        $funcname($value, $key);
-                    }
-                    if ($value!=$saved_value || $saved_key!=$key) {
-                        unset($input[$saved_key]);
-                        $input[$key] = $value;
-                    }
+            // json_encode supports only UTF-8 encoded data
+            function utfConvertor(&$value, &$key, $userdata = '') {
+                if (gettype($value)==='string') {
+                    $value = utf8_encode($value);
+                }
+                if (gettype($key)==='string') {
+                    $key = utf8_encode($key);
                 }
             }
-            return true;
-        }
 
-        $logs = array();
-        foreach ($registeredFireLoggers as $logger) {
-            $logs = array_merge($logs, $logger->logs);
-        }
+            // source: http://cz2.php.net/manual/en/function.array-walk-recursive.php#63285
+            function array_walk_recursive2(&$input, $funcname, $userdata = '') {
+                if (!is_callable($funcname)) return false;
+                if (!is_array($input)) return false;
+                foreach ($input AS $key => $value) {
+                    if (is_array($input[$key])) {
+                        array_walk_recursive2($input[$key], $funcname, $userdata);
+                    } else {
+                        $saved_value = $value;
+                        $saved_key = $key;
+                        if (!empty($userdata)) {
+                            $funcname($value, $key, $userdata);
+                        } else {
+                            $funcname($value, $key);
+                        }
+                        if ($value!=$saved_value || $saved_key!=$key) {
+                            unset($input[$saved_key]);
+                            $input[$key] = $value;
+                        }
+                    }
+                }
+                return true;
+            }
 
-        $output = array(
-            'logs' => $logs
-        );
+            $logs = array();
+            foreach ($registeredFireLoggers as $logger) {
+                $logs = array_merge($logs, $logger->logs);
+            }
+
+            $output = array(
+                'logs' => $logs
+            );
         
-        // final encoding
-        $id = dechex(mt_rand(0, 0xFFFF)).dechex(mt_rand(0, 0xFFFF)); // mt_rand is not working with 0xFFFFFFFF
-        array_walk_recursive2($output, 'utfConvertor'); // json_encode supports only UTF-8 encoded data!!!
-        $json = json_encode($output);
-        $res = str_split(base64_encode($json), 76); // RFC 2045
+            // final encoding
+            $id = dechex(mt_rand(0, 0xFFFF)).dechex(mt_rand(0, 0xFFFF)); // mt_rand is not working with 0xFFFFFFFF
+            array_walk_recursive2($output, 'utfConvertor'); // json_encode supports only UTF-8 encoded data!!!
+            $json = json_encode($output);
+            $res = str_split(base64_encode($json), 76); // RFC 2045
         
-        foreach($res as $k=>$v) {
-            header("FireLogger-$id-$k:$v");
+            foreach($res as $k=>$v) {
+                header("FireLogger-$id-$k:$v");
+            }
+        
+            return $buffer; // made no changes to the incomming buffer
         }
-        
-        return $buffer; // made no changes to the incomming buffer
+        ob_start('FireLoggerHandler'); // start output buffering
     }
-    ob_start('FireLoggerHandler'); // start output buffering
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     class FireLogger {
