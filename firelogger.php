@@ -1,14 +1,19 @@
 <?php
-    // TODO: hide global symbols into closure
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // FireLogger for PHP (server-side library)
+    //
+    // http://firelogger4php.binaryage.com
+    // protocol specs: http://wiki.github.com/darwin/firelogger
+    //
 
     // init constants, you may define them before including firelog.php
     if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.1');
     if (!defined('FIRELOGGER_API_VERSION')) define('FIRELOGGER_API_VERSION', 1);
     if (!defined('FIRELOGGER_MAX_PICKLE_DEPTH')) define('FIRELOGGER_MAX_PICKLE_DEPTH', 10);
-    if (!defined('FIRELOGGER_PASSWORD')) define('FIRELOGGER_PASSWORD', '');
 
     $registeredFireLoggers = array(); // the array of all instantiated fire-loggers during request
     $fireLoggerGlobalCounter = 0; // aid for ordering log records on client
+    $fireLoggerEnabled = true; // enabled by default
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     class FireLoggerFileLine {
@@ -88,7 +93,9 @@
         }
         
         function log(/*level, fmt, obj1, obj2, ...*/) {
-            global $fireLoggerGlobalCounter;
+            global $fireLoggerGlobalCounter, $fireLoggerEnabled;
+            if (!$fireLoggerEnabled) return; // no-op
+            
             $args = func_get_args();
             $fmt = '';
             $level = 'debug';
@@ -170,6 +177,35 @@
             $this->logs[] = $item;
         }
     }
+    
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // decide if firelogger should be enabled
+    if (!defined('FIRELOGGER_NO_VERSION_CHECK')) {
+        if (!isset($_SERVER['HTTP_X_FIRELOGGER'])) {
+            $fireLoggerEnabled = false;
+        } else {
+            $version = $_SERVER['HTTP_X_FIRELOGGER'];
+            $bestExtensionVersion = '0.7';
+            if ($version!=$bestExtensionVersion) {
+                trigger_error("FireLogger for PHP works best with FireLogger extension of version $bestExtensionVersion. Please upgrade your Firefox extension: http://firelogger4php.binaryage.com.");
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // test if firelogger password matches
+    if (!defined('FIRELOGGER_NO_PASSWORD_CHECK') && defined('FIRELOGGER_PASSWORD') && $fireLoggerEnabled) {
+        if (isset($_SERVER['HTTP_X_FIRELOGGERAUTH'])) {
+            $clientHash = $_SERVER['HTTP_X_FIRELOGGERAUTH'];
+            $serverHash = md5("#FireLoggerPassword#".FIRELOGGER_PASSWORD."#");
+            if ($clientHash!==$serverHash) { // passwords do not match
+                $fireLoggerEnabled = false;
+                trigger_error("FireLogger password do not match. Have you specified correct password FireLogger extension?");
+            }
+        } else {
+            $fireLoggerEnabled = false; // silently disable firelogger in case client didn't provide requested password
+        }   
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register default logger for convenience
@@ -240,7 +276,8 @@
         
             return $buffer; // made no changes to the incomming buffer
         }
-        ob_start('FireLoggerHandler'); // start output buffering
+        
+        if ($fireLoggerEnabled) ob_start('FireLoggerHandler'); // start output buffering (in case firelogger should be enabled)
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
