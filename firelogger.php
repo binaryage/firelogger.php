@@ -1,4 +1,6 @@
 <?php
+    // TODO: hide global symbols into closure
+
     // init constants, you may define them before including firelog.php
     if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.1');
     if (!defined('FIRELOGGER_API_VERSION')) define('FIRELOGGER_API_VERSION', 1);
@@ -78,7 +80,7 @@
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     class FireLogger {
-        public $name = 'root';
+        public $name = 'php';
         public $logs = array();
         var $levels = array('debug', 'warning', 'info', 'error', 'critical');
         
@@ -132,7 +134,7 @@
             $line = $trace[0]['line'];
             
             // special hack for eval'd code:
-            // "/Users/darwin/code/firexxx/test.php(41) : eval()'d code"
+            // "/Users/darwin/code/firelogger4php/test.php(41) : eval()'d code"
             if (preg_match('/(.*)\((\d+)\) : eval/', $file, $matches)>0) {
                 $file = $matches[1];
                 $line = $matches[2];
@@ -206,11 +208,16 @@
             $this->logs[] = $item;
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // register default logger for convenience
+    if (!defined('FIRELOGGER_NO_DEFAULT_LOGGER')) {
+        new FireLogger(); // register default firelogger
+    }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // shortcut functions for convenience
     if (!defined('FIRELOGGER_NO_CONFLICT')) {
-        new FireLogger(); // register default fire logger
         
         function flog(/*fmt, obj1, obj2, ...*/) {
             global $registeredFireLoggers;
@@ -250,12 +257,12 @@
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register global handler for uncaught exceptions
     if (!defined('FIRELOGGER_NO_EXCEPTION_HANDLER')) {
-        function firelogger_exception_handler(/*fmt, obj1, obj2, ...*/) {
+        function firelogger_exception_handler($exception) {
             global $registeredFireLoggers;
             $args = func_get_args();
             call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
         }
         set_exception_handler("firelogger_exception_handler");
     }
-    
+
 ?>
