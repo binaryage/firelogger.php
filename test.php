@@ -35,6 +35,9 @@ $api = new FireLogger("api");
 $api->log("info", "hello from api logger");
 $api->log("have", "fun!");
 
+$a = array();
+$a["bad_index"]; // should give notice!
+
 try {
     throw new Exception("this is a nasty exception, catch it!");
 } catch (Exception $e) {
