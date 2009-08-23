@@ -41,7 +41,13 @@ try {
     flog($e);
 }
 
-//throw new Exception("this exception is caught automagically because firelogger installs set_exception_handler");
+flog("timing test - this must display after nasty exception");
+$api->log("timing test - this must display after nasty exception");
+
+throw new Exception("this exception is caught automagically because firelogger installs set_exception_handler");
+
+flog("info", "you should not see this!");
+
 
 EOD;
 

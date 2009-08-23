@@ -6,6 +6,7 @@
     if (!defined('FIRELOGGER_PASSWORD')) define('FIRELOGGER_PASSWORD', '');
 
     $registeredFireLoggers = array(); // the array of all instantiated fire-loggers during request
+    $fireLoggerGlobalCounter = 0; // aid for ordering log records on client
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -140,6 +141,7 @@
         }
         
         function log(/*level, fmt, obj1, obj2, ...*/) {
+            global $fireLoggerGlobalCounter;
             $args = func_get_args();
             $fmt = '';
             $level = 'debug';
@@ -150,13 +152,14 @@
                 $fmt = array_shift($args);
             }
 
-            list($usec, $sec) = explode(' ', microtime());
+            $time = microtime(true);
             $item = array(
                 'name' => $this->name,
                 'args' => array(),
                 'level' => $level,
-                'timestamp' => $sec,
-                'time' => gmdate('H:i:s', $sec).'.'.substr($usec, 2, 3), // '23:53:13.396'
+                'timestamp' => $time,
+                'order' => $fireLoggerGlobalCounter++, // PHP is really fast, timestamp has insufficient resolution for log records ordering
+                'time' => gmdate('H:i:s', (int)$time).'.'.substr(fmod($time, 1.0), 2, 3), // '23:53:13.396'
                 'template' => $fmt,
                 'message' => $fmt
             );
@@ -243,4 +246,16 @@
             call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
         }
     }
+    
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // register global handler for uncaught exceptions
+    if (!defined('FIRELOGGER_NO_EXCEPTION_HANDLER')) {
+        function firelogger_exception_handler(/*fmt, obj1, obj2, ...*/) {
+            global $registeredFireLoggers;
+            $args = func_get_args();
+            call_user_func_array(array(&$registeredFireLoggers[0], 'log'), $args);
+        }
+        set_exception_handler("firelogger_exception_handler");
+    }
+    
 ?>
