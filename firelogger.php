@@ -9,7 +9,7 @@
     //
 
     // some directives, you may define them before including firelogger.php
-    if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.1');
+    if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.2');
     if (!defined('FIRELOGGER_API_VERSION')) define('FIRELOGGER_API_VERSION', 1);
     if (!defined('FIRELOGGER_MAX_PICKLE_DEPTH')) define('FIRELOGGER_MAX_PICKLE_DEPTH', 10);
     // ... there is more scattered throught this source, hint: search for constants beginning with "FIRELOGGER_"
