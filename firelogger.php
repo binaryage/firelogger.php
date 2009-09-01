@@ -97,11 +97,12 @@
         private function extract_file_line($trace) {
             while (count($trace)>0 && !array_key_exists('file', $trace[0])) array_shift($trace);
             $thisFile = $trace[0]['file'];
-            while (count($trace)>0 && $trace[0]['file']==$thisFile) array_shift($trace);
-            
+            while (count($trace)>0 && (array_key_exists('file', $trace[0]) && $trace[0]['file']==$thisFile)) array_shift($trace);
+            while (count($trace)>0 && !array_key_exists('file', $trace[0])) array_shift($trace);
+
+            if (count($trace)==0) return array("?", "0");
             $file = $trace[0]['file'];
             $line = $trace[0]['line'];
-            
             return $this->fix_eval_in_file_line($file, $line);
         }
         //------------------------------------------------------------------------------------------------------
