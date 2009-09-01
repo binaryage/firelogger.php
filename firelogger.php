@@ -191,6 +191,16 @@
         }
         //------------------------------------------------------------------------------------------------------
         static function firelogger_error_handler($errno, $errstr, $errfile, $errline) {
+            if (!defined('FIRELOGGER_NO_ERROR_FILTERING')) {
+                // It is important to remember that the standard PHP error handler is completely bypassed. 
+                // error_reporting() settings will have no effect and your error handler will be called regardless - 
+                // however you are still able to read the current value of error_reporting and act appropriately. 
+                // Of particular note is that this value will be 0 if the statement that caused the error was 
+                // prepended by the @ error-control operator.
+                $currentLevel = ini_get('error_reporting');
+                if (!($errno&$currentLevel)) return;
+            }
+            
             // any ideas how to get string rep of $errno from PHP?
             $errors = array(
                 1 => 'ERROR',
