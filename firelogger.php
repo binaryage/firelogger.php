@@ -190,7 +190,7 @@
             $this->logs[] = $item;
         }
         //------------------------------------------------------------------------------------------------------
-        static function firelogger_error_handler($errno, $errstr, $errfile, $errline) {
+        static function firelogger_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
             if (!defined('FIRELOGGER_NO_ERROR_FILTERING')) {
                 // It is important to remember that the standard PHP error handler is completely bypassed. 
                 // error_reporting() settings will have no effect and your error handler will be called regardless - 
@@ -222,7 +222,7 @@
             );
             $level = 'critical';
             $no = isset($errors[$errno])?$errors[$errno]:'ERROR';
-            call_user_func_array(array(&FireLogger::$error, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline)));
+            call_user_func_array(array(&FireLogger::$error, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline), $errcontext));
         }
         //------------------------------------------------------------------------------------------------------
         static function firelogger_exception_handler($exception) {
