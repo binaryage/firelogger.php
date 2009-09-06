@@ -106,6 +106,30 @@
             return $this->fix_eval_in_file_line($file, $line);
         }
         //------------------------------------------------------------------------------------------------------
+        private function extract_trace($trace) {
+            $t = array();
+            $f = array();
+            foreach ($trace as $frame) {
+                // prevent notices about invalid indices, wasn't able to google smart solution, PHP is dumb ass
+                if (!isset($frame['file'])) $frame['file'] = null;
+                if (!isset($frame['line'])) $frame['line'] = null; 
+                if (!isset($frame['class'])) $frame['class'] = null;
+                if (!isset($frame['type'])) $frame['type'] = null;
+                if (!isset($frame['function'])) $frame['function'] = null;
+                if (!isset($frame['object'])) $frame['object'] = null;
+                if (!isset($frame['args'])) $frame['args'] = null;
+                
+                $t[] = array(
+                    $frame['file'],
+                    $frame['line'],
+                    $frame['class'].$frame['type'].$frame['function'],
+                    $frame['object']
+                );
+                $f[] = $frame['args'];
+            };
+            return array($t, $f);
+        }
+        //------------------------------------------------------------------------------------------------------
         function log(/*level, fmt, obj1, obj2, ...*/) {
             if (!FireLogger::$enabled) return; // no-op
             
@@ -135,33 +159,13 @@
                 // exception with backtrace
                 $e = $args[0];
                 $trace = $e->getTrace();
-                $t = array();
-                $f = array();
-                foreach ($trace as $frame) {
-                    // prevent notices about invalid indices, wasn't able to google smart solution, PHP is dumb ass
-                    if (!isset($frame['file'])) $frame['file'] = null;
-                    if (!isset($frame['line'])) $frame['line'] = null; 
-                    if (!isset($frame['class'])) $frame['class'] = null;
-                    if (!isset($frame['type'])) $frame['type'] = null;
-                    if (!isset($frame['function'])) $frame['function'] = null;
-                    if (!isset($frame['object'])) $frame['object'] = null;
-                    if (!isset($frame['args'])) $frame['args'] = null;
-                    
-                    $t[] = array(
-                        $frame['file'],
-                        $frame['line'],
-                        $frame['class'].$frame['type'].$frame['function'],
-                        $frame['object']
-                    );
-                    $f[] = $frame['args'];
-                };
-                
+                $ti = $this->extract_trace($trace);
                 $item['exc_info'] = array(
                     $e->getMessage(),
                     $e->getFile(),
-                    $t
+                    $ti[0]
                 );
-                $item['exc_frames'] = $f;
+                $item['exc_frames'] = $ti[1];
                 $item['exc_text'] = 'exception';
                 $item['template'] = $e->getMessage();
                 $item['code'] = $e->getCode();
@@ -180,6 +184,17 @@
                         list($file, $line) = $this->fix_eval_in_file_line($arg->file, $arg->line);
                         $item['pathname'] = $file;
                         $item['lineno'] = $line;
+                        continue; // do not process this arg
+                    }
+                    // override backtrace in case we've got passed FireLoggerBacktrace
+                    if ($arg && is_object($arg) && is_a($arg, 'FireLoggerBacktrace')) { 
+                        $ti = $this->extract_trace($arg->trace);
+                        $item['exc_info'] = array(
+                            '',
+                            '',
+                            $ti[0]
+                        );
+                        $item['exc_frames'] = $ti[1];
                         continue; // do not process this arg
                     }
                     $data[] = $this->pickle($arg);
@@ -222,7 +237,7 @@
             );
             $level = 'critical';
             $no = isset($errors[$errno])?$errors[$errno]:'ERROR';
-            call_user_func_array(array(&FireLogger::$error, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline), $errcontext));
+            call_user_func_array(array(&FireLogger::$error, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline), new FireLoggerBacktrace(debug_backtrace())));
         }
         //------------------------------------------------------------------------------------------------------
         static function firelogger_exception_handler($exception) {
@@ -303,6 +318,15 @@
         function __construct($file, $line) {
             $this->file = $file;
             $this->line = $line;
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // helper class for passing backtrace override into log methods
+    class FireLoggerBacktrace {
+        public $trace;
+        function __construct($trace) {
+            $this->trace = $trace;
         }
     }
     
