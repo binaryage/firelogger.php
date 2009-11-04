@@ -1,7 +1,7 @@
 <?php
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // FireLogger for PHP (server-side library)
-    // http://firelogger4php.binaryage.com
+    // http://firelogger.binaryage.com/php
     //
     // see test.php for sample usage
     //
@@ -86,7 +86,7 @@
         //------------------------------------------------------------------------------------------------------
         private function fix_eval_in_file_line($file, $line) {
             // special hack for eval'd code:
-            // "/Users/darwin/code/firelogger4php/test.php(41) : eval()'d code 21"
+            // "/Users/darwin/code/firelogger.php/test.php(41) : eval()'d code 21"
             if (preg_match('/(.*)\((\d+)\) : eval/', $file, $matches)>0) {
                 $file = $matches[1];
                 $line = $matches[2];
@@ -306,7 +306,7 @@
                 header("FireLogger-$id-$k:$v");
             }
         
-            return $buffer; // made no changes to the incomming buffer
+            return $buffer; // made no changes to the incoming buffer
         }
     }
 
@@ -339,7 +339,7 @@
             FireLogger::$clientVersion = $_SERVER['HTTP_X_FIRELOGGER'];
             FireLogger::$recommendedClientVersion = '0.7';
             if (FireLogger::$clientVersion!=FireLogger::$recommendedClientVersion) {
-                trigger_error("FireLogger for PHP (v".FIRELOGGER_VERSION.") works best with FireLogger extension of version ".FireLogger::$recommendedClientVersion.". You are currently using extension v".FireLogger::$clientVersion.". Please upgrade your Firefox extension: http://firelogger4php.binaryage.com.");
+                trigger_error("FireLogger for PHP (v".FIRELOGGER_VERSION.") works best with FireLogger extension of version ".FireLogger::$recommendedClientVersion.". You are currently using extension v".FireLogger::$clientVersion.". Please upgrade your Firefox extension: http://firelogger.binaryage.com/php");
             }
         }
     }
