@@ -1,3 +1,8 @@
+<?php
+
+require "firelogger.php";
+
+?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
    "http://www.w3.org/TR/html4/loose.dtd">
 
@@ -10,7 +15,6 @@
         <h1>FireLogger for PHP</h1>
 <?php
     $code = <<<'EOD'
-require "firelogger.php";
 
 flog("Hello from PHP!");
 
