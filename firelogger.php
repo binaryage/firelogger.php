@@ -38,7 +38,7 @@
         public static $oldErrorHandler;
         public static $oldExceptionHandler;
         public static $clientVersion = '?';
-        public static $recommendedClientVersion = '0.7';
+        public static $recommendedClientVersion = '0.8';
         
         // logger instance data
         public $name;  // [optional] logger name
@@ -337,9 +337,8 @@
             FireLogger::$enabled = false;
         } else {
             FireLogger::$clientVersion = $_SERVER['HTTP_X_FIRELOGGER'];
-            FireLogger::$recommendedClientVersion = '0.7';
             if (FireLogger::$clientVersion!=FireLogger::$recommendedClientVersion) {
-                trigger_error("FireLogger for PHP (v".FIRELOGGER_VERSION.") works best with FireLogger extension of version ".FireLogger::$recommendedClientVersion.". You are currently using extension v".FireLogger::$clientVersion.". Please upgrade your Firefox extension: http://firelogger.binaryage.com/php");
+                error_log("FireLogger for PHP (v".FIRELOGGER_VERSION.") works best with FireLogger extension of version ".FireLogger::$recommendedClientVersion.". You are currently using extension v".FireLogger::$clientVersion.". Please upgrade your Firefox extension: http://firelogger.binaryage.com/php");
             }
         }
     }
