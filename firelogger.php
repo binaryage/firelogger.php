@@ -87,17 +87,18 @@
         private function fix_eval_in_file_line($file, $line) {
             // special hack for eval'd code:
             // "/Users/darwin/code/firelogger.php/test.php(41) : eval()'d code 21"
-            if (preg_match('/(.*)\((\d+)\) : eval/', $file, $matches)) {
-                list(, $file, $line) = $matches;
+            if (preg_match('/(.*)\((\d+)\) : eval/', $file, $matches)>0) {
+                $file = $matches[1];
+                $line = $matches[2];
             }
             return array($file, $line);
         }
         //------------------------------------------------------------------------------------------------------
         private function extract_file_line($trace) {
-            while (count($trace) && !array_key_exists('file', $trace[0])) array_shift($trace);
+            while (count($trace)>0 && !array_key_exists('file', $trace[0])) array_shift($trace);
             $thisFile = $trace[0]['file'];
-            while (count($trace) && (array_key_exists('file', $trace[0]) && $trace[0]['file']==$thisFile)) array_shift($trace);
-            while (count($trace) && !array_key_exists('file', $trace[0])) array_shift($trace);
+            while (count($trace)>0 && (array_key_exists('file', $trace[0]) && $trace[0]['file']==$thisFile)) array_shift($trace);
+            while (count($trace)>0 && !array_key_exists('file', $trace[0])) array_shift($trace);
 
             if (count($trace)==0) return array("?", "0");
             $file = $trace[0]['file'];
@@ -110,7 +111,14 @@
             $f = array();
             foreach ($trace as $frame) {
                 // prevent notices about invalid indices, wasn't able to google smart solution, PHP is dumb ass
-                $frame += array('file' => null, 'line' => null, 'class' => null, 'type' => null, 'function' => null, 'object' => null, 'args' => null);
+                if (!isset($frame['file'])) $frame['file'] = null;
+                if (!isset($frame['line'])) $frame['line'] = null; 
+                if (!isset($frame['class'])) $frame['class'] = null;
+                if (!isset($frame['type'])) $frame['type'] = null;
+                if (!isset($frame['function'])) $frame['function'] = null;
+                if (!isset($frame['object'])) $frame['object'] = null;
+                if (!isset($frame['args'])) $frame['args'] = null;
+                
                 $t[] = array(
                     $frame['file'],
                     $frame['line'],
@@ -128,10 +136,10 @@
             $args = func_get_args();
             $fmt = '';
             $level = 'debug';
-            if (is_string($args[0]) && in_array($args[0], $this->levels)) {
+            if (gettype($args[0])==='string' && in_array($args[0], $this->levels)) {
                 $level = array_shift($args);
             }
-            if (is_string($args[0])) {
+            if (gettype($args[0])==='string') {
                 $fmt = array_shift($args);
             }
 
@@ -147,7 +155,7 @@
                 'message' => $fmt // TODO: render reasonable plain text message
             );
             if ($this->style) $item['style'] = $this->style;
-            if (count($args) && $args[0] instanceof Exception) { // is_object check prevents http://pear.php.net/bugs/bug.php?id=2975
+            if (count($args)>0 && is_object($args[0]) && is_a($args[0], 'Exception')) { // is_object check prevents http://pear.php.net/bugs/bug.php?id=2975
                 // exception with backtrace
                 $e = $args[0];
                 $trace = $e->getTrace();
@@ -172,14 +180,14 @@
                 $item['lineno'] = $line;
                 foreach ($args as $arg) {
                     // override file/line in case we've got passed FireLoggerFileLine
-                    if ($arg instanceof FireLoggerFileLine) { 
+                    if ($arg && is_object($arg) && is_a($arg, 'FireLoggerFileLine')) { 
                         list($file, $line) = $this->fix_eval_in_file_line($arg->file, $arg->line);
                         $item['pathname'] = $file;
                         $item['lineno'] = $line;
                         continue; // do not process this arg
                     }
                     // override backtrace in case we've got passed FireLoggerBacktrace
-                    if ($arg instanceof FireLoggerBacktrace) { 
+                    if ($arg && is_object($arg) && is_a($arg, 'FireLoggerBacktrace')) { 
                         $ti = $this->extract_trace($arg->trace);
                         $item['exc_info'] = array(
                             '',
@@ -204,7 +212,8 @@
                 // however you are still able to read the current value of error_reporting and act appropriately. 
                 // Of particular note is that this value will be 0 if the statement that caused the error was 
                 // prepended by the @ error-control operator.
-                if (!($errno & error_reporting())) return;
+                $currentLevel = ini_get('error_reporting');
+                if (!($errno&$currentLevel)) return;
             }
             
             // any ideas how to get string rep of $errno from PHP?
@@ -228,7 +237,12 @@
             );
             $level = 'critical';
             $no = isset($errors[$errno])?$errors[$errno]:'ERROR';
-            FireLogger::$error->log($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline), new FireLoggerBacktrace(debug_backtrace()));
+            call_user_func_array(array(&FireLogger::$error, 'log'), array($level, "$no: $errstr", new FireLoggerFileLine($errfile, $errline), new FireLoggerBacktrace(debug_backtrace())));
+        }
+        //------------------------------------------------------------------------------------------------------
+        static function firelogger_exception_handler($exception) {
+            $args = func_get_args();
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
         //------------------------------------------------------------------------------------------------------
         //
@@ -238,7 +252,41 @@
         //
         // see protocol specs at http://wiki.github.com/darwin/firelogger
         //
-        static function handler() {
+        static function handler($buffer) {
+            // json_encode supports only UTF-8 encoded data
+            function utfConvertor(&$value, &$key, $userdata = '') {
+                if (gettype($value)==='string') {
+                    $value = utf8_encode($value);
+                }
+                if (gettype($key)==='string') {
+                    $key = utf8_encode($key);
+                }
+            }
+
+            // source: http://cz2.php.net/manual/en/function.array-walk-recursive.php#63285
+            function array_walk_recursive2(&$input, $funcname, $userdata = '') {
+                if (!is_callable($funcname)) return false;
+                if (!is_array($input)) return false;
+                foreach ($input AS $key => $value) {
+                    if (is_array($input[$key])) {
+                        array_walk_recursive2($input[$key], $funcname, $userdata);
+                    } else {
+                        $saved_value = $value;
+                        $saved_key = $key;
+                        if (!empty($userdata)) {
+                            $funcname($value, $key, $userdata);
+                        } else {
+                            $funcname($value, $key);
+                        }
+                        if ($value!=$saved_value || $saved_key!=$key) {
+                            unset($input[$saved_key]);
+                            $input[$key] = $value;
+                        }
+                    }
+                }
+                return true;
+            }
+
             $logs = array();
             foreach (FireLogger::$loggers as $logger) {
                 $logs = array_merge($logs, $logger->logs);
@@ -250,28 +298,16 @@
         
             // final encoding
             $id = dechex(mt_rand(0, 0xFFFF)).dechex(mt_rand(0, 0xFFFF)); // mt_rand is not working with 0xFFFFFFFF
-            self::fix_utf8($output); // json_encode supports only UTF-8 encoded data!!!
+            array_walk_recursive2($output, 'utfConvertor'); // json_encode supports only UTF-8 encoded data!!!
             $json = json_encode($output);
             $res = str_split(base64_encode($json), 76); // RFC 2045
         
             foreach($res as $k=>$v) {
                 header("FireLogger-$id-$k:$v");
             }
+        
+            return $buffer; // made no changes to the incoming buffer
         }
-
-        static function fix_utf8(&$input) { // TODO: missing circular references check
-            foreach ($input as $key => $value) {
-                unset($input[$key]);
-            	$key = utf8_encode($key);
-                if (is_array($value)) {
-                    self::fix_utf8($value);
-                } elseif (is_string($value)) {
-                	$value = utf8_encode($value);
-                }	
-                $input[$key] = $value;
-            }
-        }
-
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -326,7 +362,7 @@
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register default logger for convenience
     if (!defined('FIRELOGGER_NO_OUTPUT_HANDLER')) {
-        if (FireLogger::$enabled) ob_start(); // start output buffering (in case firelogger should be enabled)
+        if (FireLogger::$enabled) ob_start('FireLogger::handler'); // start output buffering (in case firelogger should be enabled)
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -340,34 +376,34 @@
     if (!defined('FIRELOGGER_NO_CONFLICT')) {
         function flog(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
         function fwarn(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'warning');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
         function ferror(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'error');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
         function finfo(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'info');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
         function fcritical(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'critical');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(&FireLogger::$default, 'log'), $args);
         }
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register global handler for uncaught exceptions
     if (!defined('FIRELOGGER_NO_EXCEPTION_HANDLER')) {
-        FireLogger::$oldExceptionHandler = set_exception_handler(array(FireLogger::$default, 'log'));
+        FireLogger::$oldExceptionHandler = set_exception_handler('FireLogger::firelogger_exception_handler');
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -377,4 +413,4 @@
         FireLogger::$oldErrorHandler = set_error_handler('FireLogger::firelogger_error_handler');
     }
 
-    if (FireLogger::$enabled) register_shutdown_function('FireLogger::handler');
+?>
