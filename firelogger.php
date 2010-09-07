@@ -260,6 +260,14 @@
                 return;
             }
 
+            // detector for fatal errors
+            if (function_exists('error_get_last')) {
+                $error = error_get_last();
+                if (in_array($error['type'], array(E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE))) {
+                    FireLogger::$default->log(new ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line']));
+                }
+            }
+
             $logs = array();
             foreach (FireLogger::$loggers as $logger) {
                 $logs = array_merge($logs, $logger->logs);
