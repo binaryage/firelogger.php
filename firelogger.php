@@ -225,6 +225,10 @@
         }
         //------------------------------------------------------------------------------------------------------
         static function firelogger_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
+            if (headers_sent()) {
+                return false; // calls default error handler
+            }
+
             if (!defined('FIRELOGGER_NO_ERROR_FILTERING')) {
                 // FIRELOGGER_NO_ERROR_FILTERING causes error_reporting() settings will have no effect
                 if (!($errno & error_reporting())) return;
@@ -250,7 +254,12 @@
         //
         // see protocol specs at http://wiki.github.com/darwin/firelogger
         //
-        static function handler($buffer) {
+        static function handler() {
+            if (headers_sent($file, $line)) {
+                trigger_error("Cannot send FireLogger headers after output have been sent" . ($file ? " (output started at $file:$line)." : "."), E_USER_WARNING);
+                return;
+            }
+
             $logs = array();
             foreach (FireLogger::$loggers as $logger) {
                 $logs = array_merge($logs, $logger->logs);
@@ -264,8 +273,6 @@
             foreach($res as $k=>$v) {
                 header("FireLogger-$id-$k:$v");
             }
-
-            return $buffer; // made no changes to the incoming buffer
         }
     }
 
@@ -320,7 +327,7 @@
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register default logger for convenience
     if (!defined('FIRELOGGER_NO_OUTPUT_HANDLER')) {
-        if (FireLogger::$enabled) ob_start('FireLogger::handler'); // start output buffering (in case firelogger should be enabled)
+        if (FireLogger::$enabled) ob_start(); // start output buffering (in case firelogger should be enabled)
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -370,3 +377,6 @@
         FireLogger::$error = new FireLogger('error', 'background-color: #f00');
         FireLogger::$oldErrorHandler = set_error_handler('FireLogger::firelogger_error_handler');
     }
+
+    // enable encoding handler
+    if (FireLogger::$enabled) register_shutdown_function('FireLogger::handler');
