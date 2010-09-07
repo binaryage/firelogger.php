@@ -53,35 +53,62 @@
             FireLogger::$loggers[] = $this;
         }
         //------------------------------------------------------------------------------------------------------
-        private function pickle($o, $maxLevel=FIRELOGGER_MAX_PICKLE_DEPTH) {
-            if ($maxLevel==0) {
-                // see http://us3.php.net/manual/en/language.types.string.php#73524
-                if (!is_object($o) || method_exists($o, '__toString')) {
-                    return (string)$o;
+        private function pickle($var, $level = 0) {
+            if (is_bool($var) || is_null($var) || is_int($var) || is_float($var)) {
+                return $var;
+
+            } elseif (is_string($var)) {
+                return @iconv('UTF-16', 'UTF-8//IGNORE', iconv('UTF-8', 'UTF-16//IGNORE', $var)); // intentionally @
+
+            } elseif (is_array($var)) {
+                static $marker;
+                if ($marker === NULL) $marker = uniqid("\x00", TRUE); // detects recursions
+                if (isset($var[$marker])) {
+                    return '*RECURSION*';
+
+                } elseif ($level < FIRELOGGER_MAX_PICKLE_DEPTH || !FIRELOGGER_MAX_PICKLE_DEPTH) {
+                    $var[$marker] = TRUE;
+                    $res = array();
+                    foreach ($var as $k => &$v) {
+                        if ($k !== $marker) $res[self::pickle($k)] = self::pickle($v, $level + 1);
+                    }
+                    unset($var[$marker]);
+                    return $res;
+
+                } else {
+                    return '...';
                 }
-                return get_class($o);
-            }
-            if (is_object($o)) {
-                $data = array();
-                $r = new ReflectionObject($o);
-                $props = $r->getProperties();
-                foreach ($props as $prop) {
-                    $name = $prop->getName();
-                    $prop->setAccessible(true); // http://schlitt.info/opensource/blog/0581_reflecting_private_properties.html
-                    $val = $prop->getValue($o);
-                    $data[$name] = $this->pickle($val, $maxLevel-1);
+
+            } elseif (is_object($var)) {
+                $arr = (array) $var; // TODO: add get_class($var)
+
+                static $list = array(); // detects recursions
+                if (in_array($var, $list, TRUE)) {
+                    return '*RECURSION*';
+
+                } elseif ($level < FIRELOGGER_MAX_PICKLE_DEPTH || !FIRELOGGER_MAX_PICKLE_DEPTH) {
+                    $list[] = $var;
+                    $res = array();
+                    foreach ($arr as $k => &$v) {
+                        $m = '';
+                        if ($k[0] === "\x00") {
+                            $k = substr($k, strrpos($k, "\x00") + 1);
+                        }
+                        $res[self::pickle($k)] = self::pickle($v, $level + 1);
+                    }
+                    array_pop($list);
+                    return $res;
+
+                } else {
+                    return '...';
                 }
-                return $data;
+
+            } elseif (is_resource($var)) {
+                return '*' . get_resource_type($var) . ' resource*';
+
+            } else {
+                return '*unknown type*';
             }
-            if (is_array($o)) {
-                $data = array();
-                foreach($o as $k=>$v) {
-                    $data[$k] = $this->pickle($v, $maxLevel-1);
-                }
-                return $data;
-            }
-            // TODO: investigate other complex cases
-            return $o;
         }
         //------------------------------------------------------------------------------------------------------
         private function fix_eval_in_file_line($file, $line) {
@@ -189,12 +216,12 @@
                         $item['exc_frames'] = $ti[1];
                         continue; // do not process this arg
                     }
-                    $data[] = $this->pickle($arg);
+                    $data[] = $arg;
                 }
                 $item['args'] = $data;
             }
 
-            $this->logs[] = $item;
+            $this->logs[] = self::pickle($item);
         }
         //------------------------------------------------------------------------------------------------------
         static function firelogger_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
@@ -224,53 +251,14 @@
         // see protocol specs at http://wiki.github.com/darwin/firelogger
         //
         static function handler($buffer) {
-            // json_encode supports only UTF-8 encoded data
-            function utfConvertor(&$value, &$key, $userdata = '') {
-                if (gettype($value)==='string') {
-                    $value = utf8_encode($value);
-                }
-                if (gettype($key)==='string') {
-                    $key = utf8_encode($key);
-                }
-            }
-
-            // source: http://cz2.php.net/manual/en/function.array-walk-recursive.php#63285
-            function array_walk_recursive2(&$input, $funcname, $userdata = '') {
-                if (!is_callable($funcname)) return false;
-                if (!is_array($input)) return false;
-                foreach ($input AS $key => $value) {
-                    if (is_array($input[$key])) {
-                        array_walk_recursive2($input[$key], $funcname, $userdata);
-                    } else {
-                        $saved_value = $value;
-                        $saved_key = $key;
-                        if (!empty($userdata)) {
-                            $funcname($value, $key, $userdata);
-                        } else {
-                            $funcname($value, $key);
-                        }
-                        if ($value!=$saved_value || $saved_key!=$key) {
-                            unset($input[$saved_key]);
-                            $input[$key] = $value;
-                        }
-                    }
-                }
-                return true;
-            }
-
             $logs = array();
             foreach (FireLogger::$loggers as $logger) {
                 $logs = array_merge($logs, $logger->logs);
             }
 
-            $output = array(
-                'logs' => $logs
-            );
-
             // final encoding
             $id = dechex(mt_rand(0, 0xFFFF)).dechex(mt_rand(0, 0xFFFF)); // mt_rand is not working with 0xFFFFFFFF
-            array_walk_recursive2($output, 'utfConvertor'); // json_encode supports only UTF-8 encoded data!!!
-            $json = json_encode($output);
+            $json = json_encode(array('logs' => $logs));
             $res = str_split(base64_encode($json), 76); // RFC 2045
 
             foreach($res as $k=>$v) {
