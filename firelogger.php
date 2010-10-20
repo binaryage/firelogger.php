@@ -80,7 +80,8 @@
                 }
 
             } elseif (is_object($var)) {
-                $arr = (array) $var; // TODO: add get_class($var)
+                $arr = (array) $var;
+                $arr['__class##'] = get_class($var);
 
                 static $list = array(); // detects recursions
                 if (in_array($var, $list, TRUE)) {
@@ -90,7 +91,6 @@
                     $list[] = $var;
                     $res = array();
                     foreach ($arr as $k => &$v) {
-                        $m = '';
                         if ($k[0] === "\x00") {
                             $k = substr($k, strrpos($k, "\x00") + 1);
                         }
