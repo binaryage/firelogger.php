@@ -33,6 +33,7 @@ flog("warning", "LOG level");
 flog("critical", "CRITICAL log level");
 
 flog("Complex structure %o", $_SERVER);
+flog("Complex object structure %o", (object) array('item1' => new ArrayObject($_SERVER), 'item2' => new SplFileInfo(__FILE__)));
 flog("Global scope!", $GLOBALS);
 
 $api = new FireLogger("api");
