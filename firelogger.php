@@ -111,15 +111,6 @@
             }
         }
         //------------------------------------------------------------------------------------------------------
-        private function fix_eval_in_file_line($file, $line) {
-            // special hack for eval'd code:
-            // "/Users/darwin/code/firelogger.php/test.php(41) : eval()'d code 21"
-            if (preg_match('/(.*)\((\d+)\) : eval/', $file, $matches)) {
-                list(, $file, $line) = $matches;
-            }
-            return array($file, $line);
-        }
-        //------------------------------------------------------------------------------------------------------
         private function extract_file_line($trace) {
             while (count($trace) && !array_key_exists('file', $trace[0])) array_shift($trace);
             $thisFile = $trace[0]['file'];
@@ -129,7 +120,7 @@
             if (count($trace)==0) return array("?", "0");
             $file = $trace[0]['file'];
             $line = $trace[0]['line'];
-            return $this->fix_eval_in_file_line($file, $line);
+            return array($file, $line);
         }
         //------------------------------------------------------------------------------------------------------
         private function extract_trace($trace) {
@@ -138,10 +129,9 @@
             foreach ($trace as $frame) {
                 // prevent notices about invalid indices, wasn't able to google smart solution, PHP is dumb ass
                 $frame += array('file' => null, 'line' => null, 'class' => null, 'type' => null, 'function' => null, 'object' => null, 'args' => null);
-                list($file, $line) = $this->fix_eval_in_file_line($frame['file'], $frame['line']);
                 $t[] = array(
-                    $file,
-                    $line,
+                    $frame['file'],
+                    $frame['line'],
                     $frame['class'].$frame['type'].$frame['function'],
                     $frame['object']
                 );
@@ -201,9 +191,8 @@
                 foreach ($args as $arg) {
                     // override file/line in case we've got passed FireLoggerFileLine
                     if ($arg instanceof FireLoggerFileLine) {
-                        list($file, $line) = $this->fix_eval_in_file_line($arg->file, $arg->line);
-                        $item['pathname'] = $file;
-                        $item['lineno'] = $line;
+                        $item['pathname'] = $arg->file;
+                        $item['lineno'] = $arg->line;
                         continue; // do not process this arg
                     }
                     // override backtrace in case we've got passed FireLoggerBacktrace
