@@ -47,8 +47,8 @@ try {
     flog($e);
 }
 
-flog("timing test - this must display after nasty exception");
-$api->log("timing test - this must display after nasty exception");
+flog("1.timing test - this must display after nasty exception");
+$api->log("2.timing test - this must display after nasty exception");
 
 throw new Exception("this exception is caught automagically because firelogger installs set_exception_handler");
 
