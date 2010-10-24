@@ -138,9 +138,10 @@
             foreach ($trace as $frame) {
                 // prevent notices about invalid indices, wasn't able to google smart solution, PHP is dumb ass
                 $frame += array('file' => null, 'line' => null, 'class' => null, 'type' => null, 'function' => null, 'object' => null, 'args' => null);
+                list($file, $line) = $this->fix_eval_in_file_line($frame['file'], $frame['line']);
                 $t[] = array(
-                    $frame['file'],
-                    $frame['line'],
+                    $file,
+                    $line,
                     $frame['class'].$frame['type'].$frame['function'],
                     $frame['object']
                 );
