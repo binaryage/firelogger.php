@@ -12,6 +12,7 @@
     if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.3');
     if (!defined('FIRELOGGER_API_VERSION')) define('FIRELOGGER_API_VERSION', 1);
     if (!defined('FIRELOGGER_MAX_PICKLE_DEPTH')) define('FIRELOGGER_MAX_PICKLE_DEPTH', 10);
+    if (!defined('FIRELOGGER_ENCODING')) define('FIRELOGGER_ENCODING', 'UTF-8');
     // ... there is more scattered throught this source, hint: search for constants beginning with "FIRELOGGER_"
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -58,7 +59,7 @@
                 return $var;
 
             } elseif (is_string($var)) {
-                return @iconv('UTF-16', 'UTF-8//IGNORE', iconv('UTF-8', 'UTF-16//IGNORE', $var)); // intentionally @
+                return @iconv('UTF-16', 'UTF-8//IGNORE', iconv(FIRELOGGER_ENCODING, 'UTF-16//IGNORE', $var)); // intentionally @
 
             } elseif (is_array($var)) {
                 static $marker;
