@@ -8,6 +8,10 @@
     // protocol specs: http://wiki.github.com/darwin/firelogger
     //
 
+    // PHP <5.3.x compatibility
+    if (!defined('E_DEPRECATED')) define('E_DEPRECATED', 8192);
+    if (!defined('E_USER_DEPRECATED')) define('E_USER_DEPRECATED', 16384);
+
     // some directives, you may define them before including firelogger.php
     if (!defined('FIRELOGGER_VERSION')) define('FIRELOGGER_VERSION', '0.3');
     if (!defined('FIRELOGGER_API_VERSION')) define('FIRELOGGER_API_VERSION', 1);
@@ -374,8 +378,8 @@
     // register global handler for errors
     if (!defined('FIRELOGGER_NO_ERROR_HANDLER')) {
         FireLogger::$error = new FireLogger('error', 'background-color: #f00');
-        FireLogger::$oldErrorHandler = set_error_handler('FireLogger::firelogger_error_handler');
+        FireLogger::$oldErrorHandler = set_error_handler(array('FireLogger', 'firelogger_error_handler'));
     }
 
     // enable encoding handler
-    if (FireLogger::$enabled) register_shutdown_function('FireLogger::handler');
+    if (FireLogger::$enabled) register_shutdown_function(array('FireLogger', 'handler'));
