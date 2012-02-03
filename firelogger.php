@@ -43,7 +43,7 @@
         public static $oldErrorHandler;
         public static $oldExceptionHandler;
         public static $clientVersion = '?';
-        public static $recommendedClientVersion = '0.9';
+        public static $recommendedClientVersion = '1.2';
 
         // logger instance data
         public $name;  // [optional] logger name
