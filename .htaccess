@@ -1,0 +1,2 @@
+RewriteEngine on
+RewriteRule !^tests/ tests%{REQUEST_URI}
