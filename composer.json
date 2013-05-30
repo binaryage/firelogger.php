@@ -1,0 +1,7 @@
+{
+	"name": "binaryage/firelogger",
+	"version": "0.0.1",
+	"autoload" : {
+		"psr-0": { "FireLogger": "" }
+	}
+}
