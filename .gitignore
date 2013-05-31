@@ -1,3 +1,5 @@
 _layouts
 shared
 _site
+vendor
+composer.phar

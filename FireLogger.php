@@ -33,7 +33,7 @@
     //    fwarn("Warning, %s alert!", "gertruda");
     //    ...
     //
-    class FireLogger {
+    class FireLogger implements \Psr\Log\LoggerInterface {
         // global state kept under FireLogger "namespace"
         public static $enabled = true; // enabled by default, but see the code executed after class
         public static $counter = 0; // an aid for ordering log records on client
@@ -57,6 +57,89 @@
             $this->style = $style;
             FireLogger::$loggers[] = $this;
         }
+
+        public function error( $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::ERROR, $message, $context);
+        }
+
+        public function alert( $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::WARNING, $message, $context);
+        }
+
+        public function emergency( $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::CRITICAL, $message, $context);
+        }
+
+        public function debug(  $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::DEBUG, $message, $context);
+        }
+
+        public function info(  $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::INFO, $message, $context);
+        }
+
+        public function critical(  $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::CRITICAL, $message, $context);
+        }
+
+        public function notice(  $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::INFO, $message, $context);
+        }
+
+        public function warning(  $message, array $context = array() ) {
+            $this->log(Psr\Log\LogLevel::WARNING, $message, $context);
+        }
+
+        public function log($level, $message, array $context = array() ) {
+            switch($level) {
+                case \Psr\Log\LogLevel::WARNING:
+                case \Psr\Log\LogLevel::ALERT:
+                    $level = "warning";
+                    break;
+                case \Psr\Log\LogLevel::EMERGENCY:
+                case \Psr\Log\LogLevel::CRITICAL:
+                    $level = "critical";
+                    break;
+                case \Psr\Log\LogLevel::DEBUG:
+                    $level = "debug";
+                    break;
+                case \Psr\Log\LogLevel::ERROR:
+                    $level = "error";
+                    break;
+                case \Psr\Log\LogLevel::INFO:
+                    $level = "info";
+                    break;
+                case \Psr\Log\LogLevel::NOTICE:
+                    $level = "info";
+                    break;
+                    break;
+                default:
+                    //throw new InvalidArgumentException("Level {$level} is not defined");
+            }
+
+            list($msg, $ctx) = $this->interpolate($message, $context);
+            array_unshift($ctx, $level, $msg);
+            call_user_func_array(array($this, 'firelog'), $ctx);
+        }
+
+        private function interpolate($message, array $context) {
+            $fcontext = array();
+
+            $fmessage = preg_replace_callback("/\{([\._A-Za-z0-9]+)\}/",
+                function ($matches) use (&$context, &$fcontext) {
+                    if(isset($context[$matches[1]])) {
+                        $fcontext[] = $context[$matches[1]];
+                        return "%o";
+                    } else {
+                        return $matches[0];
+                    }
+                },
+                $message
+            );
+
+            return array($fmessage, $fcontext);
+        }
+
         //------------------------------------------------------------------------------------------------------
         private function pickle($var, $level = 0) {
             if (is_bool($var) || is_null($var) || is_int($var) || is_float($var)) {
@@ -145,7 +228,7 @@
             return array($t, $f);
         }
         //------------------------------------------------------------------------------------------------------
-        function log(/*level, fmt, obj1, obj2, ...*/) {
+        function firelog(/*level, fmt, obj1, obj2, ...*/) {
             if (!FireLogger::$enabled) return; // no-op
 
             $args = func_get_args();
@@ -239,7 +322,7 @@
                 E_USER_DEPRECATED => 'Deprecated',
             );
             $no = isset($errors[$errno]) ? $errors[$errno] : 'Unknown error';
-            FireLogger::$error->log('warning', "$no: $errstr", new FireLoggerFileLine($errfile, $errline), new FireLoggerBacktrace(debug_backtrace()));
+            FireLogger::$error->firelog('warning', "$no: $errstr", new FireLoggerFileLine($errfile, $errline), new FireLoggerBacktrace(debug_backtrace()));
         }
         //------------------------------------------------------------------------------------------------------
         //
@@ -259,7 +342,7 @@
             if (function_exists('error_get_last')) {
                 $error = error_get_last();
                 if (in_array($error['type'], array(E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE))) {
-                    FireLogger::$default->log(new ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line']));
+                    FireLogger::$default->firelog(new ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line']));
                 }
             }
 
@@ -344,34 +427,34 @@
     if (!defined('FIRELOGGER_NO_CONFLICT')) {
         function flog(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(FireLogger::$default, 'firelog'), $args);
         }
         function fwarn(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'warning');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(FireLogger::$default, 'firelog'), $args);
         }
         function ferror(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'error');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(FireLogger::$default, 'firelog'), $args);
         }
         function finfo(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'info');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(FireLogger::$default, 'firelog'), $args);
         }
         function fcritical(/*fmt, obj1, obj2, ...*/) {
             $args = func_get_args();
             array_unshift($args, 'critical');
-            call_user_func_array(array(FireLogger::$default, 'log'), $args);
+            call_user_func_array(array(FireLogger::$default, 'firelog'), $args);
         }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // register global handler for uncaught exceptions
     if (!defined('FIRELOGGER_NO_EXCEPTION_HANDLER')) {
-        FireLogger::$oldExceptionHandler = set_exception_handler(array(FireLogger::$default, 'log'));
+        FireLogger::$oldExceptionHandler = set_exception_handler(array(FireLogger::$default, 'firelog'));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
