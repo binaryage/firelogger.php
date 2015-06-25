@@ -5,7 +5,7 @@
     //
     // see test.php for sample usage
     //
-    // protocol specs: http://wiki.github.com/darwin/firelogger
+    // protocol specs: https://github.com/binaryage/firelogger/wiki
     //
 
     // PHP <5.3.x compatibility
